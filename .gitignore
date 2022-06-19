@@ -1,0 +1,6 @@
+venv/
+*.log
+*.pyc
+db.*
+covers/
+search_db.json
