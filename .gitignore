@@ -4,3 +4,5 @@ venv/
 db.*
 covers/
 search_db.json
+cache/
+*.bak

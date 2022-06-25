@@ -1,4 +1,6 @@
+import json
 import logging
+from re import I
 import sqlite3
 import time
 from pathlib import Path
@@ -16,7 +18,7 @@ ROOT_DIR = Path(__file__).parent
 
 ###
 
-debug_file = paths.LOG_DIR / f'mu_scrape_{time.time():.0f}.debug'
+debug_file = paths.LOG_DIR / f'mu_scrape_{time.time():.0f}.log'
 log = logging.basicConfig(
     filename=debug_file,
     filemode='w+',
@@ -27,7 +29,9 @@ log = logging.basicConfig(
 
 ###
 
-search_db = TinyDB(paths.DATA_DIR / 'search_db.json')
+search_db_file = paths.DATA_DIR / 'search_db.json'
+with open(search_db_file) as file:
+    search_db = json.load(file)
 
 db = sqlite3.connect(paths.DB_FILE)
 cursor = db.cursor()
@@ -48,12 +52,8 @@ def search(id: int):
 ###
 
 ids = set()
-for it in search_db.all():
-    if 'results' not in it['data']:
-        search_db.remove(Query().id == it['id'])
-        continue
-    for r in it['data']['results']:
-        ids.add(r['record']['series_id'])
+for x in search_db.values():
+    ids.update(x['ids'])
 ids = list(ids)
 ids.sort()
 
@@ -71,4 +71,5 @@ for (idx, id) in enumerate(ids):
     if idx % 100 == 0: db.commit()
 
 db.close()
+
 ###
