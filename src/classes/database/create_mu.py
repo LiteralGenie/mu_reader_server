@@ -1,7 +1,9 @@
 import sqlite3
 
+
 def create_tables(cursor: sqlite3.Cursor):
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series (
             id INTEGER PRIMARY KEY,
             title TEXT,
@@ -20,7 +22,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS titles (
             series_id INTEGER,
             title TEXT,
@@ -29,7 +32,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS images (
             series_id INTEGER UNIQUE,
             original TEXT,
@@ -40,14 +44,16 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS types (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_types (
             series_id INTEGER,
             types_id INTEGER,
@@ -57,14 +63,16 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS genres (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_genres (
             series_id INTEGER,
             genres_id INTEGER,
@@ -74,14 +82,16 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_categories (
             series_id INTEGER,
             categories_id INTEGER,
@@ -95,7 +105,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS relations_types (
             id INTEGER PRIMARY KEY,
             name TEXT,
@@ -103,7 +114,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_relations (
             series_1 INTEGER,
             series_2 INTEGER,
@@ -116,21 +128,24 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS authors (
             id INTEGER PRIMARY KEY,
             name TEXT
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS authors_types (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_authors (
             series_id INTEGER,
             authors_id INTEGER,
@@ -142,21 +157,24 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS publishers (
             id INTEGER PRIMARY KEY,
             name TEXT
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS publishers_types (
             id INTEGER PRIMARY KEY,
             name TEXT UNIQUE
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_publishers (
             series_id INTEGER,
             publishers_id INTEGER,
@@ -169,7 +187,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_publications (
             series_id INTEGER,
             publishers_id INTEGER,
@@ -180,7 +199,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_recommendations (
             series_id INTEGER,
             other_series_id INTEGER,
@@ -191,7 +211,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_category_recommendations (
             series_id INTEGER,
             other_series_id INTEGER,
@@ -202,7 +223,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_anime (
             series_id INTEGER,
             start TEXT,
@@ -212,7 +234,8 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_rank (
             series_id INTEGER PRIMARY KEY,
             position_week INTEGER,
@@ -234,10 +257,11 @@ def create_tables(cursor: sqlite3.Cursor):
         )"""
     )
 
-    cursor.execute("""
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS series_meta (
             series_id INTEGER PRIMARY KEY,
             last_fetch INTEGER,
             FOREIGN KEY (series_id) REFERENCES series(id)
         )"""
-)
+    )
