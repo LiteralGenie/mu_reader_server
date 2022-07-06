@@ -1,9 +1,10 @@
+import re
 import sys
 from pathlib import Path
-import traceback
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import traceback
 import json
 import logging
 import sqlite3
@@ -50,16 +51,6 @@ db.execute(
 )
 
 
-def read(id: int) -> bool:
-    result = db.execute(
-        f"""
-        SELECT id FROM series WHERE id={id}
-        """
-    )
-
-    return result.fetchone() is None
-
-
 def insert(id: int, data: dict) -> None:
     db.execute(
         "INSERT OR REPLACE INTO series VALUES (?, ?, ?)",
@@ -72,7 +63,7 @@ def insert(id: int, data: dict) -> None:
 MU_API = URL("https://api.mangaupdates.com/v1")
 
 
-@utils.limit(calls=1, period=2, scope="mu")
+@utils.limit(calls=1, period=1, scope="mu")
 def search(id: int):
     logging.debug(f"fetching series [{id}]")
 
@@ -86,22 +77,41 @@ def search(id: int):
 
 ###
 
+id_patt = re.compile(r'"series_id": (\d+)')
+
+###
+
 # Get ids to fetch
-ids = set()
+unseen = set()
 for x in search_db.values():
-    ids.update(x["ids"])
-ids = list(ids)
-ids.sort()
+    unseen.update(x["ids"])
+unseen = set(sorted(unseen))
+seen = set()
 
 # Fetch and insert into db
-for (idx, id) in enumerate(ids):
-    print(f"{idx:05d} / {len(ids)}", end="\r")
+idx = 0
+while len(unseen) > 0:
+    print(f"{idx:06d} / {len(seen) + len(unseen)}", end="\r")
+
+    id = unseen.pop()
+    seen.add(id)
+    idx += 1
 
     try:
-        result = db.execute(f"SELECT id FROM series WHERE id={id}").fetchone()
-        if result is None:
+        data = db.execute(f"SELECT data FROM series WHERE id={id}").fetchone()
+        if data is None:
             data = search(id)
             insert(id, data)
+            new_ids = d1 = set(
+                x["series_id"]
+                for grp in ["category_recommendations", "recommendations"]
+                for x in data[grp]
+            )
+        else:
+            new_ids = set(int(x) for x in id_patt.findall(data[0]))
+            new_ids = set(x for x in new_ids if x > 100000)
+
+        unseen.update(new_ids.difference(seen))
     except Exception as e:
         traceback.print_exc()
         logging.error(f"Error processing [{id=}]")

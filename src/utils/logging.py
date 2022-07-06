@@ -9,7 +9,7 @@ def configure_logging(name_fn=None):
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     name_fn = name_fn or (lambda d: f'logs_{int(time.time())}_{d["pid"]}.log')
-    data = dict(pid=multiprocessing.current_process().pid)
+    data = dict(pid=multiprocessing.current_process().pid, time=int(time.time()))
     debug_file = paths.LOG_DIR / name_fn(data)
 
     logging.basicConfig(

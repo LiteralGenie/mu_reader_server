@@ -36,6 +36,7 @@ if __name__ == "__main__":
     madokami_dirs = [
         Path("/media/anne/media_temp/madokami/"),
         Path("/media/anne/media_2/madokami/"),
+        Path("/media/anne/the_one/madokami/"),
     ]
     output_dir = Path("/home/anne/manga")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     letters = list()
     for dir in madokami_dirs:
         letters.extend(dir.glob("*"))
-    assert all(len(f.name) == 1 for f in letters)
+    # assert all(len(f.name) == 1 for f in letters)
 
     series = [s for l in letters for s in l.glob("*")]
 

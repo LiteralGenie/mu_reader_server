@@ -1,29 +1,30 @@
+from typing import Union
 from pony.orm import *
 
 from . import db
 
 
 class Series(db.Entity):
-    id = PrimaryKey(int, auto=False)
+    id: int = PrimaryKey(int, auto=False, size=64)
 
-    bayesian_rating = Optional(float)
-    completed = Required(bool)
-    description = Required(str)
-    forum_id = Required(int)
-    last_updated = Required(float)
-    latest_chapter = Required(float)
-    licensed = Required(bool)
-    rating_votes = Required(int)
-    status = Optional(str)
-    name = Required(str)
-    year_start = Optional(int)
+    bayesian_rating: float | None = Optional(float)
+    completed: bool = Required(bool)
+    description: str = Optional(str)
+    forum_id: int = Required(int, size=64)
+    last_updated: float = Required(float)
+    latest_chapter: float = Required(float)
+    licensed: bool = Required(bool)
+    name: str = Required(str)
+    rating_votes: int = Required(int)
+    status: str = Optional(str)
+    year: int | None = Optional(int)
 
-    anime = Optional("Anime")
-    authors = Set("Author")
-    categories = Set("SeriesCategory")
-    cat_recs_1 = Set("CategoryRecommendation")
-    cat_recs_2 = Set("CategoryRecommendation")
-    covers = Optional("Cover")
+    anime: Union["Anime", None] = Optional("Anime")
+    authors = Set("SeriesAuthor")
+    categories = Set("Category")
+    cat_recs = Set("CategoryRecommendation")
+    cat_recs_for = Set("CategoryRecommendation")
+    cover = Optional("Cover")
     genres = Set("Genre")
     publications = Set("Publication")
     publishers = Set("SeriesPublisher")
@@ -42,56 +43,79 @@ class Anime(db.Entity):
 
     series = Required(Series)
 
+    composite_key(start, end, series)
+
 
 class Author(db.Entity):
-    id = PrimaryKey(int, auto=False)
+    id = PrimaryKey(int, auto=False, size=64)
 
     name = Required(str)
 
-    author_type = Set("AuthorType")
-    series = Set(Series)
+    series = Set("SeriesAuthor")
 
 
 class AuthorType(db.Entity):
-    name = Required(str)
+    name = PrimaryKey(str)
 
-    authors = Required(Author)
+    authors = Set("SeriesAuthor")
+
+
+class Category(db.Entity):
+    votes = Required(int)
+    votes_minus = Required(int)
+    votes_plus = Required(int)
+
+    series = Required(Series)
+    type = Required("CategoryType")
+
+    composite_key(series, type)
 
 
 class CategoryType(db.Entity):
-    name = Required(str)
+    name = PrimaryKey(str)
 
-    series_categories = Set("SeriesCategory")
+    series_categories = Set(Category)
 
 
 class CategoryRecommendation(db.Entity):
     weight = Required(int)
 
-    series_1 = Required(Series, reverse="cat_recs_1")
-    series_2 = Required(Series, reverse="cat_recs_2")
+    base_series = Required(Series, reverse="cat_recs")
+    recommendation = Required(Series, reverse="cat_recs_for")
+
+    composite_key(base_series, recommendation)
 
 
 class Cover(db.Entity):
-    original = Required(str)
     height = Required(int)
+    original = Required(str)
     thumbnail = Required(str)
     width = Required(int)
 
-    series = Required(Series)
+    series = PrimaryKey(Series)
 
 
 class Genre(db.Entity):
-    name = Required(str)
+    name = PrimaryKey(str)
 
     series = Set(Series)
 
 
+class Publication(db.Entity):
+    name = Required(str)
+
+    publisher = Optional("Publisher")
+    series = Required(Series)
+
+    composite_key(name, publisher, series)
+
+
 class Publisher(db.Entity):
-    id = PrimaryKey(int, auto=False)
+    id = PrimaryKey(int, auto=False, size=64)
 
     name = Required(str)
 
-    publications = Set("Publication")
+    publications = Set(Publication)
     series = Set("SeriesPublisher")
 
 
@@ -99,25 +123,6 @@ class PublisherType(db.Entity):
     name = Required(str)
 
     series = Set("SeriesPublisher")
-
-
-class RelationType(db.Entity):
-    name = Required(str)
-
-    relations = Set("Relation")
-
-
-class Relation(db.Entity):
-    series_1 = Required(Series, reverse="relations_1")
-    series_2 = Required(Series, reverse="relations_2")
-    relation_type = Required(RelationType)
-
-
-class Publication(db.Entity):
-    name = Required(str)
-
-    publisher = Optional(Publisher)
-    series = Required(Series)
 
 
 class Rank(db.Entity):
@@ -136,7 +141,7 @@ class Rank(db.Entity):
     position_six_months = Optional(int)
     position_year = Optional(int)
 
-    series = Required(Series)
+    series = PrimaryKey(Series)
 
 
 class Recommendation(db.Entity):
@@ -145,14 +150,31 @@ class Recommendation(db.Entity):
     series_1 = Required(Series, reverse="recs_1")
     series_2 = Required(Series, reverse="recs_2")
 
+    composite_key(series_1, series_2)
 
-class Category(db.Entity):
-    votes = Required(int)
-    votes_minus = Required(int)
-    votes_plus = Required(int)
 
+class Relation(db.Entity):
+    series_1 = Required(Series, reverse="relations_1")
+    series_2 = Required(Series, reverse="relations_2")
+    relation_type = Required("RelationType")
+
+    composite_key(series_1, series_2, relation_type)
+
+
+class RelationType(db.Entity):
+    name = PrimaryKey(str)
+
+    relations = Set(Relation)
+
+
+class SeriesAuthor(db.Entity):
+    type = Required(AuthorType)
+    name = Required(str)
+
+    author = Optional(Author)
     series = Required(Series)
-    type = Required(CategoryType)
+
+    composite_key(type, name, author, series)
 
 
 class SeriesPublisher(db.Entity):
@@ -162,14 +184,18 @@ class SeriesPublisher(db.Entity):
     publisher = Required(Publisher)
     publisher_type = Required(PublisherType)
 
+    composite_key(series, publisher, publisher_type)
+
 
 class Title(db.Entity):
     name = Required(str)
 
     series = Required(Series)
 
+    composite_key(name, series)
+
 
 class Type(db.Entity):
-    name = Required(str)
+    name = PrimaryKey(str)
 
     series = Set(Series)
