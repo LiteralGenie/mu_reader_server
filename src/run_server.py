@@ -1,4 +1,3 @@
-from collections import OrderedDict
 import logging
 
 import requests
@@ -10,7 +9,6 @@ from fastapi.responses import FileResponse
 from pony import orm
 
 from classes.models import db
-from classes.models.mu_models import CategoryType, Genre, Series, Title
 from config import paths
 from utils.logging import configure_logging
 
@@ -25,7 +23,9 @@ if db.provider is None:
 @app.get("/series/ids")
 def get_ids(offset: int = 0, limit: int = 100):
     with orm.db_session:
-        result = orm.select(s.id for s in Series)[offset : offset + limit]
+        result = orm.select(s.id for s in db.entities["Series"])[
+            offset : offset + limit
+        ]
     return list(result)
 
 
@@ -47,7 +47,7 @@ def get_series(id: int):
                 orm.group_concat(s.categories.type.name),
                 orm.group_concat(s.titles.name),
             ]
-            for s in Series
+            for s in db.entities["Series"]
             if s.id == id
         )[:]
 
@@ -67,7 +67,7 @@ def get_series(id: int):
         "title",
         "description",
         "year",
-        "score",
+        "bayesian_rating",
         "licensed",
         "completed",
         "type",
@@ -95,7 +95,9 @@ def get_series(id: int):
 @app.get("/series/images/{id}")
 def get_image(id: int):
     with orm.db_session:
-        result = orm.select(s.cover.original for s in Series if s.id == id)[:]
+        result = orm.select(
+            s.cover.original for s in db.entities["Series"] if s.id == id
+        )[:]
 
     if len(result) == 0:
         return HTTPException(404)
@@ -114,7 +116,9 @@ def get_image(id: int):
 @app.get("/series/genres")
 def get_genres():
     with orm.db_session:
-        result = orm.select([g.name, len(s.name for s in g.series)] for g in Genre)[:]
+        result = orm.select(
+            [g.name, len(s.name for s in g.series)] for g in db.entities["Genre"]
+        )[:]
 
     keys = ["name", "count"]
     resp = [zip(keys, r) for r in result]
@@ -126,7 +130,7 @@ def get_genres():
 def get_categories(count_min: int = 101):
     with orm.db_session:
         result = orm.select(
-            [c.name, len(c.series_categories)] for c in CategoryType
+            [c.name, len(c.series_categories)] for c in db.entities["CategoryType"]
         ).order_by(orm.desc(2))[:]
     return result
 
@@ -151,28 +155,30 @@ def get_search(
     categories_exclude = categories_exclude or []
 
     sort_key_map = {
-        "title": Series.name,
-        "year": Series.year,
-        "score": Series.bayesian_rating,
+        "title": db.entities["Series"].name,
+        "year": db.entities["Series"].year,
+        "score": db.entities["Series"].bayesian_rating,
         # "time": last_update,
     }
 
     with orm.db_session:
-        result = orm.select(s for s in Series)
+        result = orm.select(s for s in db.entities["Series"])
 
         # Filter title
         title = (title or "").split(" ")
         temp = db.entities["Title"]
         for word in title:
             temp = orm.select(t for t in temp if word in t.name)
-        result = orm.select(t.series for t in temp if t.series in result)
+        temp = orm.select(t.series for t in temp)
+        result = orm.select(s for s in result if s in temp)
 
         # Filter author
         author = (author or "").split(" ")
         temp = db.entities["SeriesAuthor"]
         for word in author:
             temp = orm.select(a for a in temp if word in a.name)
-        result = orm.select(a.series for a in temp if a.series in result)
+        temp = orm.select(a.series for a in temp)
+        result = orm.select(s for s in result if s in temp)
 
         # Filter year
         if year_start_min:
@@ -214,7 +220,7 @@ def get_search(
             result = result.order_by(orm.desc(sort_key))
 
         result = orm.select(s.id for s in result)
-        result = list(OrderedDict.fromkeys(result))
+        result = list(result)
 
     return result
 
