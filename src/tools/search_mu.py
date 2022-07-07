@@ -31,7 +31,7 @@ with open(db_file) as file:
 MU_API = URL("https://api.mangaupdates.com/v1")
 
 
-@utils.limit(calls=1, period=3, scope="mu")
+@utils.limit(calls=1, period=1, scope="mu")
 def _search(name: str):
     ep = MU_API / "series" / "search"
     resp = requests.post(str(ep), json=dict(search=name))
@@ -61,9 +61,12 @@ def search(name: str):
         return _search(name)
 
 
+start = time.time()
 series_dir = Path("/home/anne/manga")
-for s in series_dir.glob("*"):
+series = list(series_dir.glob("*"))
+for i, s in enumerate(series):
     logging.info(f"processing [{s.name}]")
+    print(f"[{time.time()-start:.1f}s] {i:05d} / {len(series)}...", end="\r")
 
     try:
         assert s.is_dir()

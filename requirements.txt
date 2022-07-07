@@ -1,4 +1,5 @@
 fastapi
+pony
 requests
 urlpath
 uvicorn

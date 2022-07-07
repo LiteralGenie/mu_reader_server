@@ -1,34 +1,32 @@
+import re
 import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
+import traceback
 import json
 import logging
 import sqlite3
 import sys
 import time
-from re import I
 
 import requests
 import utils
-from classes import database
 from config import paths
 from urlpath import URL
+from utils.logging import configure_logging
 
 ###
 
-ROOT_DIR = Path(__file__).parent
+"""
+Fetch series data from the mu api. Basically stores the response as a json, no other fanciness.
+"""
 
 ###
 
-debug_file = paths.LOG_DIR / f"mu_scrape_{time.time():.0f}.log"
-log = logging.basicConfig(
-    filename=debug_file,
-    filemode="w+",
-    encoding="utf-8",
-    format="%(asctime)s %(levelname)s %(message)s",
-    level=logging.DEBUG,
+configure_logging(
+    name_fn=lambda d: f"mu-fetch-series_{int(time.time())}_{d['pid']}.log"
 )
 
 ###
@@ -37,8 +35,28 @@ search_db_file = paths.DATA_DIR / "search_db.json"
 with open(search_db_file) as file:
     search_db = json.load(file)
 
-db = sqlite3.connect(paths.DB_FILE)
-cursor = db.cursor()
+###
+
+db_file = paths.DATA_DIR / "raw_mu.sqlite"
+db = sqlite3.connect(db_file)
+
+db.execute(
+    """
+    CREATE TABLE IF NOT EXISTS series (
+        id              INTEGER         PRIMARY KEY,
+        last_fetch      REAL            NOT NULL,
+        data            TEXT            NOT NULL
+    )
+    """
+)
+
+
+def insert(id: int, data: dict) -> None:
+    db.execute(
+        "INSERT OR REPLACE INTO series VALUES (?, ?, ?)",
+        (id, time.time(), json.dumps(data)),
+    )
+
 
 ###
 
@@ -47,34 +65,58 @@ MU_API = URL("https://api.mangaupdates.com/v1")
 
 @utils.limit(calls=1, period=1, scope="mu")
 def search(id: int):
+    logging.debug(f"fetching series [{id}]")
+
     ep = MU_API / "series" / str(id)
     resp = requests.get(str(ep))
     data = resp.json()
     assert resp.status_code == 200
 
-    logging.debug(f"fetched series [{id}] from [{ep}]")
     return data
 
 
 ###
 
-ids = set()
-for x in search_db.values():
-    ids.update(x["ids"])
-ids = list(ids)
-ids.sort()
+id_patt = re.compile(r'"series_id": (\d+)')
 
-for (idx, id) in enumerate(ids):
-    print(f"{idx:05d} / {len(ids)}", end="\r")
+###
+
+# Get ids to fetch
+unseen = set()
+for x in search_db.values():
+    unseen.update(x["ids"])
+unseen = set(sorted(unseen))
+seen = set()
+
+# Fetch and insert into db
+idx = 0
+while len(unseen) > 0:
+    print(f"{idx:06d} / {len(seen) + len(unseen)}", end="\r")
+
+    id = unseen.pop()
+    seen.add(id)
+    idx += 1
 
     try:
-        result = cursor.execute(f"SELECT id FROM series WHERE id={id}").fetchone()
-        if result is None:
+        data = db.execute(f"SELECT data FROM series WHERE id={id}").fetchone()
+        if data is None:
             data = search(id)
-            database.insert_series(data, cursor, op="REPLACE")
+            insert(id, data)
+            new_ids = d1 = set(
+                x["series_id"]
+                for grp in ["category_recommendations", "recommendations"]
+                for x in data[grp]
+            )
+        else:
+            new_ids = set(int(x) for x in id_patt.findall(data[0]))
+            new_ids = set(x for x in new_ids if x > 100000)
+
+        unseen.update(new_ids.difference(seen))
     except Exception as e:
-        logging.exception(f"Error processing [{id=}]\n{e}")
-        continue
+        traceback.print_exc()
+        logging.error(f"Error processing [{id=}]")
+        logging.exception(e)
+
     if idx % 100 == 0:
         db.commit()
 

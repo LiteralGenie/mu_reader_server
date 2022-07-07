@@ -1,5 +1,4 @@
 import logging
-import sqlite3
 
 import requests
 import urlpath
@@ -7,197 +6,137 @@ import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pony import orm
 
+from classes.models import db
 from config import paths
 from utils.logging import configure_logging
 
 configure_logging()
 app = FastAPI(debug=True)
 
+if db.provider is None:
+    db.bind(provider="sqlite", filename=str(paths.DB_FILE))
+    db.generate_mapping()
+
 
 @app.get("/series/ids")
 def get_ids(offset: int = 0, limit: int = 100):
-    with sqlite3.connect(paths.DB_FILE) as db:
-        result = db.execute(
-            """
-            SELECT id FROM series
-            ORDER BY bayesian_rating DESC
-            LIMIT ?
-            OFFSET ?
-        """,
-            (limit, offset),
-        )
-        result = result.fetchall()
-        result = [r[0] for r in result]
-
-        return result
+    with orm.db_session:
+        result = orm.select(s.id for s in db.entities["Series"])[
+            offset : offset + limit
+        ]
+    return list(result)
 
 
 @app.get("/series/ids/{id}")
 def get_series(id: int):
-    with sqlite3.connect(paths.DB_FILE) as db:
-        resp = dict()
 
-        # basic info
-        result = db.execute(
-            """
-            SELECT
-                series.id,
-                series.title,
-                series.description,
-                series.year_start,
-                series.bayesian_rating,
-                series.licensed,
-                series.completed,
-                types.name as type
-            FROM series
-            INNER JOIN series_types ON series_types.series_id = series.id
-            INNER JOIN types ON types.id = series_types.types_id
-            WHERE series.id = ?
-        """,
-            (id,),
-        )
-        keys = [x[0] for x in result.description]
-        data = result.fetchone()
-        resp.update({k: v for k, v in zip(keys, data)})
+    with orm.db_session:
+        result = orm.select(
+            [
+                s.id,
+                s.name,
+                s.description,
+                s.year,
+                s.bayesian_rating,
+                s.licensed,
+                s.completed,
+                s.type.name,
+                orm.group_concat(s.genres.name),
+                orm.group_concat(s.categories.type.name),
+                orm.group_concat(s.titles.name),
+            ]
+            for s in db.entities["Series"]
+            if s.id == id
+        )[:]
 
-        # authors
-        result = db.execute(
-            """
-            SELECT authors.name, authors.id FROM authors
-            INNER JOIN series_authors ON series_authors.authors_id = authors.id
-            WHERE series_authors.series_id = ?
-        """,
-            (id,),
-        )
-        keys = [x[0] for x in result.description]
-        data = result.fetchall()
-        resp["authors"] = [{k: v for k, v in zip(keys, d)} for d in data]
+        author_result = orm.select(
+            [a.name, a.type.name]
+            for a in db.entities["SeriesAuthor"]
+            if a.series.id == id
+        )[:]
 
-        # genres
-        result = db.execute(
-            """
-            SELECT genres.name FROM genres
-            INNER JOIN series_genres ON series_genres.genres_id = genres.id
-            WHERE series_genres.series_id = ?
-        """,
-            (id,),
-        )
-        data = [r[0] for r in result.fetchall()]
-        resp["genres"] = data
+    if len(result) == 0:
+        return HTTPException(404)
 
-        # categories
-        result = db.execute(
-            """
-            SELECT categories.name FROM categories
-            INNER JOIN series_categories ON series_categories.categories_id = categories.id
-            WHERE series_categories.series_id = ?
-        """,
-            (id,),
-        )
-        data = [r[0] for r in result.fetchall()]
-        resp["categories"] = data
+    resp = dict()
 
-        # title
-        result = db.execute(
-            """
-            SELECT title FROM titles
-            WHERE series_id = ?
-        """,
-            (id,),
-        )
-        data = [r[0] for r in result.fetchall()]
-        resp["titles"] = data
+    keys = [
+        "id",
+        "title",
+        "description",
+        "year",
+        "bayesian_rating",
+        "licensed",
+        "completed",
+        "type",
+        "genres",
+        "categories",
+        "titles",
+    ]
+    result = dict(zip(keys, result[0]))
+    result["genres"] = (result["genres"] or "").split(",")
+    result["categories"] = (result["categories"] or "").split(",")
+    result["titles"] = (result["titles"] or "").split(",")
+    resp.update(result)
 
-        # typing
-        resp["licensed"] = bool(resp["licensed"])
-        resp["completed"] = bool(resp["completed"])
+    keys = [
+        "name",
+        "type",
+    ]
+    print(author_result)
+    author_result = [zip(keys, r) for r in author_result]
+    resp["authors"] = author_result
 
-        return resp
+    return resp
 
 
 @app.get("/series/images/{id}")
 def get_image(id: int):
-    with sqlite3.connect(paths.DB_FILE) as db:
-        result = db.execute(
-            """
-            SELECT original FROM images
-            WHERE series_id = ?
-        """,
-            (id,),
-        )
-        result = result.fetchone()
+    with orm.db_session:
+        result = orm.select(
+            s.cover.original for s in db.entities["Series"] if s.id == id
+        )[:]
 
-        if result is None:
-            raise HTTPException(404)
+    if len(result) == 0:
+        return HTTPException(404)
 
-        url = urlpath.URL(result[0])
-        file = paths.COVER_DIR / url.parts[-1]
-        if not file.exists():
-            with open(file, "wb") as f:
-                logging.info(f"fetching image [{url}]")
-                content = requests.get(url).content
-                f.write(content)
+    url = urlpath.URL(result[0])
+    file = paths.COVER_DIR / url.parts[-1]
+    if not file.exists():
+        with open(file, "wb") as f:
+            logging.info(f"fetching image [{url}]")
+            content = requests.get(url).content
+            f.write(content)
 
-        return FileResponse(file)
+    return FileResponse(file)
 
 
 @app.get("/series/genres")
 def get_genres():
-    with sqlite3.connect(paths.DB_FILE) as db:
-        result = db.execute(
-            """
-            SELECT series_genres.genres_id as id, genres.name as name, COUNT(*) as count FROM series_genres
-            INNER JOIN genres ON genres.id = series_genres.genres_id
-            GROUP BY series_genres.genres_id
-            ORDER BY count DESC
-        """
-        )
+    with orm.db_session:
+        result = orm.select(
+            [g.name, len(s.name for s in g.series)] for g in db.entities["Genre"]
+        )[:]
 
-        keys = [x[0] for x in result.description]
-        values = result.fetchall()
+    keys = ["name", "count"]
+    resp = [zip(keys, r) for r in result]
 
-        resp = [zip(keys, v) for v in values]
-        resp = [{k: v for k, v in it} for it in resp]
-
-        return resp
+    return resp
 
 
 @app.get("/series/categories")
 def get_categories(count_min: int = 101):
-    with sqlite3.connect(paths.DB_FILE) as db:
-        result = db.execute(
-            """
-            SELECT * FROM (
-                SELECT series_categories.categories_id as id, categories.name as name, COUNT(*) as count FROM series_categories
-                INNER JOIN categories ON categories.id = series_categories.categories_id
-                GROUP BY series_categories.categories_id
-                ORDER BY count DESC
-            )
-            WHERE count > ?
-        """,
-            [count_min],
-        )
-
-        keys = [x[0] for x in result.description]
-        values = result.fetchall()
-
-        resp = [zip(keys, v) for v in values]
-        resp = [{k: v for k, v in it} for it in resp]
-
-        return resp
-
-
-sort_key_map = {
-    "title": "title",
-    "year": "year_start",
-    "score": "bayesian_rating",
-    "time": "last_update",
-}
+    with orm.db_session:
+        result = orm.select(
+            [c.name, len(c.series_categories)] for c in db.entities["CategoryType"]
+        ).order_by(orm.desc(2))[:]
+    return result
 
 
 @app.get("/series/search")
-def post_search(
+def get_search(
     title: str = None,
     author: str = None,
     year_start_min: int = None,
@@ -205,135 +144,85 @@ def post_search(
     score_min: int = None,
     licensed: bool = None,
     completed: bool = None,
-    genres: list[int] = Query(None),
-    genres_exclude: list[int] = Query(None),
-    categories: list[int] = Query(None),
-    categories_exclude: list[int] = Query(None),
+    genres: list[str] = Query(None),
+    genres_exclude: list[str] = Query(None),
+    categories: list[str] = Query(None),
+    categories_exclude: list[str] = Query(None),
     sort_by: str = None,
     ascending: bool = True,
 ):
-    genres = genres or []
     categories = categories or []
+    categories_exclude = categories_exclude or []
 
-    with sqlite3.connect(paths.DB_FILE) as db:
-        subs = []
+    sort_key_map = {
+        "title": db.entities["Series"].name,
+        "year": db.entities["Series"].year,
+        "score": db.entities["Series"].bayesian_rating,
+        # "time": last_update,
+    }
 
-        q_data = f"""
-            SELECT
-                series.id, series.title, group_concat(authors.name) as authors, series.year_start, series.bayesian_rating, series.licensed, series.completed
-            FROM series
-            INNER JOIN series_authors ON series_authors.series_id = series.id
-            INNER JOIN authors ON authors.id = series_authors.authors_id
-            GROUP BY series.id
-        """
+    with orm.db_session:
+        result = orm.select(s for s in db.entities["Series"])
 
-        if genres or genres_exclude:
-            conditions = []
+        # Filter title
+        title = (title or "").split(" ")
+        temp = db.entities["Title"]
+        for word in title:
+            temp = orm.select(t for t in temp if word in t.name)
+        temp = orm.select(t.series for t in temp)
+        result = orm.select(s for s in result if s in temp)
 
-            if genres:
-                conditions.append(
-                    f"series_genres.genres_id IN ({','.join(['?' for x in genres])})"
-                )
-                subs.extend(genres)
+        # Filter author
+        author = (author or "").split(" ")
+        temp = db.entities["SeriesAuthor"]
+        for word in author:
+            temp = orm.select(a for a in temp if word in a.name)
+        temp = orm.select(a.series for a in temp)
+        result = orm.select(s for s in result if s in temp)
 
-            if genres_exclude:
-                conditions.append(
-                    f"series_genres.genres_id NOT IN ({','.join(['?' for x in genres_exclude])})"
-                )
-                subs.extend(genres_exclude)
-
-            q_data = f"""
-                SELECT * FROM ({q_data})
-                INNER JOIN series_genres ON series_genres.series_id = id
-                WHERE ({' AND '.join(conditions)})
-                GROUP BY id
-            """
-
-            if genres:
-                q_data = f"""
-                    {q_data}
-                    HAVING COUNT(DISTINCT(series_genres.genres_id)) = {len(genres)}
-                """
-
-        if categories:
-            conditions = []
-
-            if categories:
-                conditions.append(
-                    f"series_categories.categories_id IN ({','.join(['?' for x in categories])})"
-                )
-                subs.extend(categories)
-
-            if categories_exclude:
-                conditions.append(
-                    f"series_categories.categories_id NOT IN ({','.join(['?' for x in categories_exclude])})"
-                )
-                subs.extend(categories_exclude)
-
-            q_data = f"""
-                SELECT * FROM ({q_data})
-                INNER JOIN series_categories ON series_categories.series_id = id
-                WHERE ({' AND '.join(conditions)})
-                GROUP BY id
-            """
-
-            if categories:
-                q_data = f"""
-                    {q_data}
-                    HAVING COUNT(DISTINCT(series_genres.genres_id)) = {len(categories)}
-                """
-
-        conditions = []
-
-        if title:
-            cs = []
-            words = title.lower().strip().split()
-            for w in words:
-                cs.append("instr(lower(title), ?)")
-                subs.append(w)
-            conditions.append(f"({' AND '.join(cs)})")
-
-        if author:
-            cs = []
-            words = author.lower().strip().split()
-            for w in words:
-                cs.append("instr(lower(authors), ?)")
-                subs.append(w)
-            conditions.append(f"({' AND '.join(cs)})")
-
+        # Filter year
         if year_start_min:
-            conditions.append(f"year_start >= ? OR year_start IS NULL")
-            subs.append(year_start_min)
+            result = orm.select(s for s in result if s.year >= year_start_min)
         if year_start_max:
-            conditions.append(f"(year_start <= ? OR year_start IS NULL)")
-            subs.append(year_start_max)
+            result = orm.select(s for s in result if s.year <= year_start_max)
 
-        if score_min is not None:
-            conditions.append(f"bayesian_rating >= ?")
-            subs.append(score_min)
+        # Filter score
+        if score_min:
+            result = orm.select(s for s in result if s.bayesian_rating >= score_min)
 
+        # Filter status
         if licensed is not None:
-            conditions.append(f"licensed = ?")
-            subs.append(int(licensed))
-
+            result = orm.select(s for s in result if s.licensed == licensed)
         if completed is not None:
-            conditions.append(f"completed = ?")
-            subs.append(int(completed))
+            result = orm.select(s for s in result if s.completed == completed)
 
-        q_cond = f"WHERE ({') AND ('.join(conditions)})" if len(conditions) > 0 else ""
+        # Filter genres
+        genres = genres or []
+        for c in genres:
+            result = orm.select(s for s in result if c in s.genres.name)
+        genres_exclude = genres_exclude or []
+        for c in genres_exclude:
+            result = orm.select(s for s in result if c not in s.genres.name)
 
-        sort_condition = f"ORDER BY {sort_key_map.get(sort_by, 'bayesian_rating')} { 'ASC' if ascending else 'DESC' }"
+        # Filter categories
+        categories = categories or []
+        for c in categories:
+            result = orm.select(s for s in result if c in s.categories.name)
+        categories_exclude = categories_exclude or []
+        for c in categories_exclude:
+            result = orm.select(s for s in result if c not in s.categories.name)
 
-        q = f"""
-            SELECT id FROM ({q_data})
-            {q_cond}
-            {sort_condition}
-        """
-        print(q)
-        result = db.execute(q, subs)
+        # Sort
+        sort_key = sort_key_map.get(sort_by, sort_key_map["score"])
+        if ascending:
+            result = result.order_by(sort_key)
+        else:
+            result = result.order_by(orm.desc(sort_key))
 
-        resp = [x[0] for x in result.fetchall()]
-        return resp
+        result = orm.select(s.id for s in result)
+        result = list(result)
+
+    return result
 
 
 origins = ["*"]

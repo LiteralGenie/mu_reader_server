@@ -1,8 +1,9 @@
-venv/
-*.log
-*.pyc
-db.*
 covers/
-search_db.json
 cache/
+venv/
+
+*.pyc
+*.sqlite
+*.log
 *.bak
+search_db.json
