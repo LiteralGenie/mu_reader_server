@@ -1,9 +1,11 @@
 covers/
 cache/
+typings/
 venv/
 
-*.pyc
-*.sqlite
 *.log
 *.bak
+*.pyc
+*.sqlite
+.fuse_hidden*
 search_db.json

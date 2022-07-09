@@ -21,11 +21,6 @@ configure_logging(lambda d: f"insert_mu_{d['time']}_{d['pid']}.log")
 
 ###
 
-db_file = paths.DB_FILE
-db.bind(provider="sqlite", filename=str(db_file), create_db=True)
-db.generate_mapping(create_tables=True)
-# orm.set_sql_debug(True)
-
 raw_db_file = paths.DATA_DIR / "raw_mu.sqlite"
 raw_db = sqlite3.connect(raw_db_file)
 
