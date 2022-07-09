@@ -1,25 +1,25 @@
-from typing import Union
+from __future__ import annotations
 from pony.orm import *
 
 from . import db
 
 
 class Series(db.Entity):
-    id: int = PrimaryKey(int, auto=False, size=64)
+    id = PrimaryKey(int, auto=False, size=64)
 
-    bayesian_rating: float | None = Optional(float)
-    completed: bool = Required(bool)
-    description: str = Optional(str)
-    forum_id: int = Required(int, size=64)
-    last_updated: float = Required(float)
-    latest_chapter: float = Required(float)
-    licensed: bool = Required(bool)
-    name: str = Required(str)
-    rating_votes: int = Required(int)
-    status: str = Optional(str)
-    year: int | None = Optional(int)
+    bayesian_rating = Optional(float)
+    completed = Required(bool)
+    description = Optional(str)
+    forum_id = Required(int, size=64)
+    last_updated = Required(float)
+    latest_chapter = Required(float)
+    licensed = Required(bool)
+    name = Required(str)
+    rating_votes = Required(int)
+    status = Optional(str)
+    year = Optional(int)
 
-    anime: Union["Anime", None] = Optional("Anime")
+    anime = Optional("Anime")
     authors = Set("SeriesAuthor")
     categories = Set("Category")
     cat_recs = Set("CategoryRecommendation")
@@ -35,6 +35,8 @@ class Series(db.Entity):
     relations_2 = Set("Relation")
     titles = Set("Title")
     type = Required("Type")
+
+    folders = Set("SeriesFolder")
 
 
 class Anime(db.Entity):
