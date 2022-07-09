@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import TypedDict, cast
-from . import paths
+
 import toml
+from config import paths
 
 
 class SettingsInterface(TypedDict):
@@ -20,8 +21,13 @@ class Settings:
 
     @classmethod
     def load(cls) -> "Settings":
-        data = cast(SettingsInterface, toml.load(paths.CONFIG_DIR / "settings.toml"))
+        data = toml.load(paths.CONFIG_DIR / "settings.toml")
+        data = cast(SettingsInterface, data)
         return Settings(data)
+
+    def dump(self) -> None:
+        data = dict(series_dirs=[str(x) for x in self.series_dirs])
+        toml.dump(data, open(paths.CONFIG_DIR / "settings.toml", "w"))
 
     def validate(self) -> bool:
         """
