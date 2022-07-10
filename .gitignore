@@ -6,6 +6,7 @@ venv/
 
 *.log
 *.bak
+*.profile
 *.pyc
 *.sqlite
 .fuse_hidden*

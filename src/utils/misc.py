@@ -1,5 +1,10 @@
+from typing import TypeVar
+
+
 CALL_LOG = dict()
-def limit(calls: int, period: float = 1, scope = ''):
+
+
+def limit(calls: int, period: float = 1, scope=""):
     """
     Decorator for rate limiting function calls
     """
@@ -23,7 +28,7 @@ def limit(calls: int, period: float = 1, scope = ''):
                     history.pop(0)
                 else:
                     break
-            
+
             if len(history) >= calls:
                 oldest = history[0]
                 elapsed = now - oldest
@@ -35,5 +40,21 @@ def limit(calls: int, period: float = 1, scope = ''):
             result = f(*args, **kwargs)
             history.append(time.time())
             return result
+
         return wrapper
+
     return decorator
+
+
+T = TypeVar("T")
+
+
+def upsert(cls: T, key: dict, data: dict | None = None) -> T:
+    data = data or dict()
+
+    obj = cls.get(**key)
+    if obj is None:
+        obj = cls(**key, **data)
+    else:
+        obj.set(**data)
+    return obj

@@ -16,7 +16,7 @@ def configure_logging(name_fn=None):
         filename=debug_file,
         filemode="w+",
         encoding="utf-8",
-        format="%(asctime)s,%(msecs)03d %(levelname)s %(message)s",
+        format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",
         datefmt=r"%H:%M:%S",
         level=logging.DEBUG,
     )

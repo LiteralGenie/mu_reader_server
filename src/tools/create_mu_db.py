@@ -1,7 +1,6 @@
 import sys
-from pathlib import Path
 import time
-from typing import TypeVar
+from pathlib import Path
 
 sys.path.append(str(Path(__file__).parent.parent))
 
@@ -14,6 +13,7 @@ from classes.models import db, mu_models
 from config import paths
 from pony import orm
 from utils.logging import configure_logging
+from utils.misc import upsert
 
 ###
 
@@ -53,20 +53,6 @@ def parse_year(text: str = None) -> tuple[int, int]:
         raise ValueError
 
     return years
-
-
-T = TypeVar("T")
-
-
-def upsert(cls: T, key: dict, data: dict = None) -> T:
-    data = data or dict()
-
-    obj = cls.get(**key)
-    if obj is None:
-        obj = cls(**key, **data)
-    else:
-        obj.set(**data)
-    return obj
 
 
 ###

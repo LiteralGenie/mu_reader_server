@@ -2,13 +2,34 @@ import logging
 
 import requests
 import urlpath
+from classes.file_manager import FileManager
 from classes.models import db
+from classes.models.misc_models import Locks
 from config import paths
-from fastapi import HTTPException, Query
+from fastapi import BackgroundTasks, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from pony import orm
 
 from . import app
+
+
+@app.post("/scan_series")
+def post_scan_series(background_tasks: BackgroundTasks):
+    def scan_and_update():
+        with orm.db_session:
+            lock = Locks["series_scan"]
+            if lock.locked:
+                return
+            else:
+                lock.locked = True
+
+        fm = FileManager()
+        series = fm.scan()
+        fm.update_db(series)
+
+    background_tasks.add_task(scan_and_update)
+
+    return Response(status_code=202)
 
 
 @app.get("/series/ids")
@@ -127,6 +148,7 @@ def get_categories(count_min: int = 101):
 
 @app.get("/series/search")
 def get_search(
+    folder_count: int = 1,
     title: str = None,
     author: str = None,
     year_start_min: int = None,
@@ -153,6 +175,9 @@ def get_search(
 
     with orm.db_session:
         result = orm.select(s for s in db.entities["Series"])
+
+        # Filter disk files
+        result = orm.select(s for s in result if len(s.folders) >= folder_count)
 
         # Filter title
         title = (title or "").split(" ")

@@ -13,7 +13,13 @@ def sqlite_case_sensitivity(db: Database, connection):
 
 # define table models
 from .mu_models import *
+from .storage_models import *
+from .misc_models import *
 
 # load db
 db.bind(provider="sqlite", filename=str(paths.DB_FILE), create_db=True)
 db.generate_mapping(create_tables=True)
+
+# reset locks
+with db_session:
+    upsert(Locks, dict(name="series_scan"), dict(locked=False))
