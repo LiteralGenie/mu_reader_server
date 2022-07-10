@@ -62,36 +62,44 @@ class FileManager:
         timer = Timer()
 
         with orm.db_session:
-            # Get MU title data
-            titles = orm.select([t.name, t.series.id] for t in Title)[:]
-            title_map = {t[0].lower(): t[1] for t in titles}
-            title_set = cFuzzySet([t[0].lower() for t in titles])
+            # Filter out series that already have a db entry (except if update=True)
+            targets = [dict(s=s, sf=SeriesFolder.get(name=s.name)) for s in series]
+            if update is False:
+                targets = [x for x in targets if x["sf"] is None]
 
-            for s in series:
-                # Link folder to a MU series
-                sf = SeriesFolder.get(name=s.name)
-                if sf is None or update:
-                    # Search for matching title
-                    results = title_set.get(s.name.lower())
-                    if results is None:
-                        log.warning(f"No metadata for [{s.name}]")
-                        series_match = None
-                        dist = None
-                    else:
-                        [dist, title] = results[0]
-                        series_match = Series[title_map[title]]
+            if targets:
+                # Only fetch MU data if we plan to use it, because it's computationally expensive (especially init'ing the FuzzySet)
+                titles = orm.select([t.name, t.series.id] for t in Title)[:]
+                title_map = {t[0].lower(): t[1] for t in titles}
+                title_set = cFuzzySet([t[0].lower() for t in titles])
 
-                    # Create or update SeriesFolder in db
-                    data = dict(
-                        name=s.name,
-                        path=str(s.path),
-                        series=series_match,
-                        series_score=dist,
-                    )
+                # Link each folder to a MU series
+                for t in targets:
+                    s = t["s"]
+                    sf = t["sf"]
 
-                    if sf is None:
-                        sf = SeriesFolder(**data)
-                    else:
-                        sf.set(**data)
+                    if sf is None or update:
+                        # Search for matching title
+                        results = title_set.get(s.name.lower())
+                        if results is not None:
+                            [dist, title] = results[0]
+                            series_match = Series[title_map[title]]
+                        else:
+                            # No match found, default to Nones
+                            log.warning(f"No metadata for [{s.name}]")
+                            series_match = None
+                            dist = None
+
+                        # Create or update SeriesFolder in db
+                        data = dict(
+                            name=s.name,
+                            path=str(s.path),
+                            series=series_match,
+                            series_score=dist,
+                        )
+                        if sf is None:
+                            sf = SeriesFolder(**data)
+                        else:
+                            sf.set(**data)
 
         log.info(f"Processed {len(series)} SeriesFolders in {timer.elapsed:.1f}s")
